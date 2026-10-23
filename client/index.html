@@ -37,6 +37,26 @@ hr{border:0;border-top:1px solid #6d805d;margin:20px 0}
 #result{white-space:pre-wrap;overflow-wrap:anywhere;background:#09271f;border-radius:10px;padding:12px}
 @media(max-width:600px){body{padding:8px}main{margin:4px auto;padding:13px;border-radius:14px}.panel{padding:14px}h1{font-size:1.65rem}.cards{gap:7px}.card{padding:7px;border-width:2px}}
 
+
+/* Table layout */
+#tableLayout{position:relative;margin:20px 0;padding:22px;border:3px solid #c5a45d;border-radius:48%;background:radial-gradient(ellipse,#176b49 0%,#0d5037 65%,#083524 100%);box-shadow:inset 0 0 0 5px #ffffff0a,0 8px 24px #0005;min-height:210px}
+#tableSeats{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:12px;position:relative;z-index:1}
+.table-seat{padding:10px 6px;border:1px solid #c5a45d88;border-radius:12px;background:#06291fcc;text-align:center;min-width:0}
+.table-seat strong{display:block;overflow-wrap:anywhere;color:#f2d27b}
+.table-seat small{display:block;color:#e8d9ae;margin-top:4px}
+.seat-backs{display:flex;justify-content:center;gap:3px;margin-top:8px}
+.card-back{width:19px;height:29px;border:2px solid #e8d9ae;border-radius:4px;background:repeating-linear-gradient(45deg,#174b39,#174b39 3px,#d4b76c 3px,#d4b76c 4px);box-shadow:0 2px 4px #0005}
+#deckCenter{text-align:center;padding:18px 8px;color:#f2d27b;font-weight:800}
+.deck-stack{display:inline-flex;align-items:center;justify-content:center;width:56px;height:78px;border:3px solid #e8d9ae;border-radius:8px;background:repeating-linear-gradient(45deg,#174b39,#174b39 5px,#d4b76c 5px,#d4b76c 7px);box-shadow:3px 3px 0 #8c6a32,6px 6px 0 #0005;color:#fff4ce;font-size:24px}
+#result{display:flex;flex-direction:column;gap:14px;white-space:normal;overflow-wrap:anywhere}
+.result-player{padding:12px;border:1px solid #b89b53;border-radius:12px;background:#0b3024}
+.result-player h4{margin:0 0 8px;color:#f2d27b}
+.result-player p{margin:6px 0}
+.result-cards{display:flex;flex-wrap:wrap;gap:5px}
+.result-card{display:flex;flex-direction:column;justify-content:space-between;width:48px;height:68px;padding:5px;border:1px solid #d5cba9;border-radius:6px;background:#fffefa;color:#171717;font-size:15px;font-weight:800}
+.result-card.red{color:#c62835}
+.result-card small{font-size:10px}
+@media(min-width:700px){#tableLayout{padding:28px}#tableSeats{grid-template-columns:repeat(3,minmax(0,1fr))}.table-seat{padding:12px}}
 </style>
 </head>
 <body>
@@ -80,6 +100,10 @@ hr{border:0;border-top:1px solid #6d805d;margin:20px 0}
 <section class="panel hidden" id="gamePanel">
 <h2 id="roundTitle">ゲーム</h2>
 <p id="gameHelp">交換するカードを選択してください。</p>
+<div id="tableLayout" aria-label="ポーカーテーブル">
+  <div id="tableSeats"></div>
+  <div id="deckCenter"><div class="deck-stack" aria-label="カードの山">♠</div><div>DECK</div></div>
+</div>
 <div id="hand" class="cards"></div>
 <button id="confirm">交換内容を確定</button>
 <div id="voteBox" class="hidden">
@@ -253,6 +277,141 @@ function renderHand() {
     lastState.me.eliminated;
 }
 
+function renderRoundResult(result) {
+  const root = $("result");
+  root.replaceChildren();
+  if (!result) return;
+
+  const message = document.createElement("p");
+  message.textContent = result.message || "";
+  root.appendChild(message);
+
+  (result.scored || []).forEach(player => {
+    const section = document.createElement("section");
+    section.className = "result-player";
+
+    const heading = document.createElement("h4");
+    heading.textContent = player.nickname;
+    section.appendChild(heading);
+
+    const rank = document.createElement("p");
+    rank.textContent = "役: " + (player.rank?.name || "結果");
+    section.appendChild(rank);
+
+    const cards = document.createElement("div");
+    cards.className = "result-cards";
+
+    (player.hand || []).forEach(card => {
+      const face = document.createElement("div");
+      face.className = "result-card" +
+        (["♥", "♦"].includes(card.suit) ? " red" : "");
+
+      const suit = document.createElement("span");
+      suit.textContent = card.suit || "";
+
+      const value = document.createElement("strong");
+      value.textContent = card.rankName || String(card.rank ?? "");
+
+      const bottom = document.createElement("small");
+      bottom.textContent = card.suit || "";
+
+      face.append(suit, value, bottom);
+      cards.appendChild(face);
+    });
+
+    section.appendChild(cards);
+    root.appendChild(section);
+  });
+
+  if (!result.scored) {
+    const fallback = document.createElement("pre");
+    fallback.textContent = JSON.stringify(result, null, 2);
+    root.appendChild(fallback);
+  }
+}
+
+
+function renderTableSeats(players, result) {
+  const root = $("tableSeats");
+  root.replaceChildren();
+
+  const scoredById = new Map(
+    (result?.scored || []).map(player => [player.id, player])
+  );
+
+  (players || []).forEach(player => {
+    const seat = document.createElement("div");
+    seat.className = "table-seat";
+
+    const name = document.createElement("strong");
+    name.textContent = player.nickname;
+    seat.appendChild(name);
+
+    const points = document.createElement("small");
+    points.textContent =
+      Number(player.points).toLocaleString("ja-JP") + " pt";
+    seat.appendChild(points);
+
+    const scored = scoredById.get(player.id);
+
+    if (result && scored && Array.isArray(scored.hand)) {
+      // ラウンド終了：役名と表向きのカードを表示
+      const rank = document.createElement("small");
+      rank.textContent = "役：" + (scored.rank?.name || "結果");
+      seat.appendChild(rank);
+
+      const cards = document.createElement("div");
+      cards.className = "result-cards";
+      cards.style.justifyContent = "center";
+      cards.style.marginTop = "8px";
+
+      scored.hand.forEach(card => {
+        const face = document.createElement("div");
+        face.className =
+          "result-card" +
+          (["♥", "♦"].includes(card.suit) ? " red" : "");
+
+        const suit = document.createElement("span");
+        suit.textContent = card.suit || "";
+
+        const value = document.createElement("strong");
+        value.textContent = card.rankName || String(card.rank ?? "");
+
+        const bottom = document.createElement("small");
+        bottom.textContent = card.suit || "";
+
+        face.append(suit, value, bottom);
+        cards.appendChild(face);
+      });
+
+      seat.appendChild(cards);
+    } else {
+      // 交換中・次のラウンド：カードは裏向き
+      const backs = document.createElement("div");
+      backs.className = "seat-backs";
+
+      const count = player.eliminated ? 0 : 5;
+
+      for (let i = 0; i < count; i++) {
+        const back = document.createElement("span");
+        back.className = "card-back";
+        back.setAttribute("aria-label", "伏せたカード");
+        backs.appendChild(back);
+      }
+
+      seat.appendChild(backs);
+    }
+
+    if (player.eliminated) {
+      const status = document.createElement("small");
+      status.textContent = "脱落";
+      seat.appendChild(status);
+    }
+
+    root.appendChild(seat);
+  });
+}
+
 function renderState(state) {
   lastState = state;
   const room = state.room;
@@ -265,7 +424,13 @@ function renderState(state) {
 
   $("players").replaceChildren();
 
-  room.players.forEach(player => {
+
+  
+renderTableSeats(
+  room.players || [],
+  room.phase === "result" ? room.result : null
+);
+room.players.forEach(player => {
     const item = document.createElement("li");
     item.textContent =
       `${player.nickname}：${Number(player.points).toLocaleString()} pt` +
@@ -307,9 +472,7 @@ function renderState(state) {
   $("voteEnd").disabled = room.phase !== "vote" || state.vote !== null;
   $("voteContinue").disabled = room.phase !== "vote" || state.vote !== null;
 
-  $("result").textContent = room.result
-    ? JSON.stringify(room.result, null, 2)
-    : "";
+  renderRoundResult(room.result);
 
   renderHand();
 }
@@ -358,15 +521,23 @@ socket.on("game:notice", data => {
 });
 
 socket.on("game:result", data => {
-  $("result").textContent = JSON.stringify(data, null, 2);
+  if (lastState?.room) {
+    const updatedRoom = {
+      ...lastState.room,
+      phase: "result",
+      result: data
+    };
+
+    renderState({
+      ...lastState,
+      room: updatedRoom
+    });
+  } else {
+    renderRoundResult(data);
+  }
+
   msg(data?.message || "ラウンド終了");
 });
-
-socket.on("game:ended", data => {
-  $("result").textContent = JSON.stringify(data, null, 2);
-  msg(data?.message || "ゲーム終了");
-});
-
 socket.on("connect", () => {
   msg("サーバーに接続しました。");
 
