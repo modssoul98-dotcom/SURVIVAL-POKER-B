@@ -1,0 +1,394 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SURVIVAL POKER B</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:#10151d;color:#f4f6fa;font-family:system-ui,sans-serif}
+main{max-width:900px;margin:20px auto}
+h1{text-align:center;color:#f4c95d}
+.panel{background:#1d2633;border:1px solid #38465a;border-radius:14px;padding:18px;margin:14px 0}
+input,select,button{width:100%;padding:12px;margin:7px 0;border-radius:8px;font-size:16px}
+input,select{background:#10151d;color:white;border:1px solid #536176}
+button{border:0;background:#f4c95d;color:#202020;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.secondary{background:#34445b;color:white}
+.muted{color:#bac5d5}
+#message{color:#f4c95d;min-height:24px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1;min-width:120px}
+.cards{display:flex;flex-wrap:wrap;gap:10px}
+.card{width:100px;height:140px;background:white;color:#111;border:3px solid transparent;border-radius:10px;display:flex;flex-direction:column;justify-content:space-between;padding:10px;font-size:25px}
+.card.red{color:#c22}
+.card.selected{border-color:#f4c95d;transform:translateY(-5px)}
+.card small{font-size:13px}
+.hidden{display:none}
+li{margin:7px 0}
+#result{white-space:pre-wrap;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<main>
+<h1>SURVIVAL POKER B</h1>
+<p class="muted" style="text-align:center">オンライン対戦ポーカー</p>
+
+<section class="panel" id="lobby">
+<label for="nickname">ニックネーム（20文字以内）</label>
+<input id="nickname" maxlength="20" placeholder="名前を入力">
+<label for="initialPoints">初期ポイント</label>
+<select id="initialPoints">
+<option value="5000">5,000ポイント</option>
+<option value="10000" selected>10,000ポイント</option>
+<option value="15000">15,000ポイント</option>
+<option value="20000">20,000ポイント</option>
+<option value="25000">25,000ポイント</option>
+<option value="30000">30,000ポイント</option>
+<option value="35000">35,000ポイント</option>
+<option value="40000">40,000ポイント</option>
+<option value="45000">45,000ポイント</option>
+<option value="50000">50,000ポイント</option>
+</select>
+<button id="create">ルームを作成</button>
+<hr>
+<label for="codeInput">参加するルームコード</label>
+<input id="codeInput" maxlength="6" placeholder="6文字のコード">
+<button id="join" class="secondary">ルームに参加</button>
+</section>
+
+<section class="panel hidden" id="roomPanel">
+<p>ルームコード：<strong id="roomCode"></strong></p>
+<p>初期ポイント：<strong id="roomPoints"></strong></p>
+<button id="copy" class="secondary">コードをコピー</button>
+<h2>参加者一覧</h2>
+<ol id="players"></ol>
+<p id="phase"></p>
+<button id="leave" class="secondary">ルームを退出</button>
+</section>
+
+<section class="panel hidden" id="gamePanel">
+<h2 id="roundTitle">ゲーム</h2>
+<p id="gameHelp">交換するカードを選択してください。</p>
+<div id="hand" class="cards"></div>
+<button id="confirm">交換内容を確定</button>
+<div id="voteBox" class="hidden">
+<h3>ゲームを終了しますか？</h3>
+<div class="row">
+<button id="voteEnd">終了する</button>
+<button id="voteContinue" class="secondary">続行する</button>
+</div>
+</div>
+<h3>結果</h3>
+<div id="result"></div>
+</section>
+
+<p id="message" role="status"></p>
+</main>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+const $ = id => document.getElementById(id);
+let currentRoom = null;
+let token = null;
+let selected = new Set();
+let lastState = null;
+
+function msg(text) {
+  $("message").textContent = text;
+}
+
+function emitAck(event, data) {
+  return new Promise(resolve => socket.emit(event, data, resolve));
+}
+
+function getNickname() {
+  return $("nickname").value.trim();
+}
+
+async function enter(event, data) {
+  if (!getNickname()) {
+    msg("ニックネームを入力してください。");
+    return;
+  }
+
+  const result = await emitAck(event, {
+    ...data,
+    nickname: getNickname()
+  });
+
+  if (!result?.ok) {
+    msg(result?.error || "操作に失敗しました。");
+    return;
+  }
+
+  currentRoom = result.code;
+  token = result.token || token;
+  $("roomCode").textContent = result.code;
+  $("codeInput").value = result.code;
+  $("lobby").classList.add("hidden");
+  $("roomPanel").classList.remove("hidden");
+  msg("ルームに入りました！");
+}
+
+$("create").onclick = () => enter("room:create", {
+  initialPoints: Number($("initialPoints").value)
+});
+
+$("join").onclick = () => {
+  const code = $("codeInput").value.trim().toUpperCase();
+  if (code.length !== 6) {
+    msg("6文字のルームコードを入力してください。");
+    return;
+  }
+  enter("room:join", { code });
+};
+
+$("copy").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText(currentRoom);
+    msg("ルームコードをコピーしました。");
+  } catch {
+    msg("ルームコード：" + currentRoom);
+  }
+};
+
+$("leave").onclick = () => {
+  if (!confirm("退出しますか？ゲーム中は脱落扱いになる場合があります。")) return;
+
+  socket.emit("room:leave");
+  currentRoom = null;
+  lastState = null;
+  selected.clear();
+
+  $("roomPanel").classList.add("hidden");
+  $("gamePanel").classList.add("hidden");
+  $("lobby").classList.remove("hidden");
+  msg("退出しました。");
+};
+
+$("confirm").onclick = async () => {
+  if (!lastState || lastState.room.phase !== "exchange") return;
+
+  const result = await emitAck("exchange:confirm", {
+    indices: [...selected]
+  });
+
+  if (!result?.ok) {
+    msg(result?.error || "確定できません。");
+    return;
+  }
+
+  selected.clear();
+  renderHand();
+  msg("交換内容を確定しました。全員の確定を待っています。");
+};
+
+$("voteEnd").onclick = async () => {
+  const result = await emitAck("vote:cast", { vote: "end" });
+  msg(result?.ok ? "終了に投票しました。" : result?.error || "投票できません。");
+};
+
+$("voteContinue").onclick = async () => {
+  const result = await emitAck("vote:cast", { vote: "continue" });
+  msg(result?.ok ? "続行に投票しました。" : result?.error || "投票できません。");
+};
+
+function renderHand() {
+  const hand = lastState?.hand || [];
+  $("hand").replaceChildren();
+
+  hand.forEach((card, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className =
+      "card" +
+      ("♥♦".includes(card.suit) ? " red" : "") +
+      (selected.has(index) ? " selected" : "");
+
+    const top = document.createElement("span");
+    top.textContent = card.suit;
+
+    const rank = document.createElement("strong");
+    rank.textContent = card.rankName;
+
+    const bottom = document.createElement("small");
+    bottom.textContent = card.suit;
+
+    button.append(top, rank, bottom);
+
+    button.onclick = () => {
+      if (!lastState ||
+          lastState.room.phase !== "exchange" ||
+          lastState.confirmed ||
+          lastState.me.eliminated) return;
+
+      if (selected.has(index)) {
+        selected.delete(index);
+      } else if (selected.size < 5) {
+        selected.add(index);
+      }
+
+      renderHand();
+    };
+
+    $("hand").appendChild(button);
+  });
+
+  $("confirm").disabled =
+    !lastState ||
+    lastState.room.phase !== "exchange" ||
+    lastState.confirmed ||
+    lastState.me.eliminated;
+}
+
+function renderState(state) {
+  lastState = state;
+  const room = state.room;
+
+  $("roomPoints").textContent =
+    Number(room.initialPoints).toLocaleString("ja-JP");
+
+  $("phase").textContent =
+    `状態：${room.phase} / ラウンド：${room.round}`;
+
+  $("players").replaceChildren();
+
+  room.players.forEach(player => {
+    const item = document.createElement("li");
+    item.textContent =
+      `${player.nickname}：${Number(player.points).toLocaleString()} pt` +
+      (player.isHost ? "（ホスト）" : "") +
+      (player.eliminated ? "（脱落）" : "") +
+      (!player.connected ? "（切断中）" : "") +
+      (player.confirmed && room.phase === "exchange" ? "（交換確定）" : "");
+    $("players").appendChild(item);
+  });
+
+  const gameVisible =
+    room.started ||
+    ["exchange", "result", "vote", "ended"].includes(room.phase);
+
+  $("gamePanel").classList.toggle("hidden", !gameVisible);
+  $("roundTitle").textContent = `ラウンド ${room.round || "-"}`;
+
+  if (room.phase === "exchange") {
+    $("gameHelp").textContent = state.me.eliminated
+      ? "あなたは脱落しています。結果を確認できます。"
+      : state.confirmed
+        ? "交換確定済みです。ほかのプレイヤーを待っています。"
+        : "交換するカードを選んでください。何も選ばず確定すると交換なしです。";
+  } else if (room.phase === "vote") {
+    $("gameHelp").textContent = "終了または続行に投票してください。";
+  } else if (room.phase === "result") {
+    $("gameHelp").textContent = "ラウンド結果です。次のラウンドまで10秒待ちます。";
+  } else if (room.phase === "ended") {
+    $("gameHelp").textContent = "ゲーム終了。30秒後に待機画面へ戻ります。";
+  } else {
+    $("gameHelp").textContent = "参加者を待っています。";
+  }
+
+  $("voteBox").classList.toggle(
+    "hidden",
+    room.phase !== "vote" || state.me.eliminated || state.vote !== null
+  );
+
+  $("voteEnd").disabled = room.phase !== "vote" || state.vote !== null;
+  $("voteContinue").disabled = room.phase !== "vote" || state.vote !== null;
+
+  $("result").textContent = room.result
+    ? JSON.stringify(room.result, null, 2)
+    : "";
+
+  renderHand();
+}
+
+socket.on("session:token", data => {
+  token = data.token;
+  try {
+    sessionStorage.setItem("spb_token", data.token);
+    sessionStorage.setItem("spb_code", data.code);
+  } catch {}
+});
+
+socket.on("room:updated", room => {
+  if (currentRoom !== room.code) return;
+
+  const base = lastState || {
+    hand: [],
+    me: { eliminated: false },
+    confirmed: false,
+    vote: null
+  };
+
+  renderState({ ...base, room });
+});
+
+socket.on("game:state", state => {
+  if (currentRoom && state.room.code !== currentRoom) return;
+
+  currentRoom = state.room.code;
+  $("roomCode").textContent = currentRoom;
+  $("lobby").classList.add("hidden");
+  $("roomPanel").classList.remove("hidden");
+  $("gamePanel").classList.remove("hidden");
+
+  renderState(state);
+});
+
+socket.on("game:started", data => {
+  const text = data?.message || "ゲーム開始！";
+  msg(text);
+  alert(text);
+});
+
+socket.on("game:notice", data => {
+  msg(data?.message || "ゲームが更新されました。");
+});
+
+socket.on("game:result", data => {
+  $("result").textContent = JSON.stringify(data, null, 2);
+  msg(data?.message || "ラウンド終了");
+});
+
+socket.on("game:ended", data => {
+  $("result").textContent = JSON.stringify(data, null, 2);
+  msg(data?.message || "ゲーム終了");
+});
+
+socket.on("connect", () => {
+  msg("サーバーに接続しました。");
+
+  try {
+    const savedToken = sessionStorage.getItem("spb_token");
+    const savedCode = sessionStorage.getItem("spb_code");
+
+    if (savedToken && savedCode) {
+      socket.emit("session:resume", {
+        token: savedToken,
+        code: savedCode
+      }, result => {
+        if (result?.ok) {
+          currentRoom = result.code;
+          msg("再接続しました。");
+        } else {
+          sessionStorage.removeItem("spb_token");
+          sessionStorage.removeItem("spb_code");
+        }
+      });
+    }
+  } catch {}
+});
+
+socket.on("connect_error", () => {
+  msg("サーバーに接続できません。");
+});
+
+socket.on("disconnect", () => {
+  msg("接続が切れました。再接続を試みています。");
+});
+</script>
+</body>
+</html>
