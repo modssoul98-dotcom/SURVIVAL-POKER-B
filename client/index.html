@@ -7,27 +7,36 @@
 <title>SURVIVAL POKER B</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;padding:16px;background:#10151d;color:#f4f6fa;font-family:system-ui,sans-serif}
-main{max-width:900px;margin:20px auto}
-h1{text-align:center;color:#f4c95d}
-.panel{background:#1d2633;border:1px solid #38465a;border-radius:14px;padding:18px;margin:14px 0}
-input,select,button{width:100%;padding:12px;margin:7px 0;border-radius:8px;font-size:16px}
-input,select{background:#10151d;color:white;border:1px solid #536176}
-button{border:0;background:#f4c95d;color:#202020;font-weight:bold;cursor:pointer}
-button:disabled{opacity:.5;cursor:not-allowed}
-.secondary{background:#34445b;color:white}
-.muted{color:#bac5d5}
-#message{color:#f4c95d;min-height:24px}
+:root{color-scheme:dark}
+body{margin:0;padding:20px;background:radial-gradient(ellipse at top,#176044 0%,#0b3528 55%,#071e18 100%);color:#f8f4e8;font-family:system-ui,"Yu Gothic",Meiryo,sans-serif;min-height:100vh}
+main{max-width:960px;margin:20px auto;padding:24px;background:rgba(7,27,21,.72);border:1px solid #b89b53;border-radius:22px;box-shadow:0 18px 55px #0008}
+h1{text-align:center;color:#f2d27b;letter-spacing:.08em;text-shadow:0 2px 14px #d8ad4933}
+h2,h3{color:#f2d27b}
+.panel{background:linear-gradient(145deg,#123f30,#0d3025);border:1px solid #967b3f;border-radius:16px;padding:20px;margin:16px 0;box-shadow:inset 0 1px #ffffff0b,0 8px 20px #0002}
+label{display:block;margin-top:10px;color:#e8d9ae;font-weight:600}
+input,select,button{width:100%;padding:13px 15px;margin:8px 0;border-radius:9px;font-size:16px}
+input,select{background:#09271f;color:#fff9e9;border:1px solid #7c8d70;outline:none}
+input:focus,select:focus{border-color:#f2d27b;box-shadow:0 0 0 3px #f2d27b22}
+button{border:1px solid #f8df98;background:linear-gradient(#f6dc91,#d3aa4f);color:#292111;font-weight:800;cursor:pointer;box-shadow:0 3px 0 #8b692a;transition:filter .15s,transform .15s}
+button:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px)}
+button:active:not(:disabled){transform:translateY(1px);box-shadow:0 1px 0 #8b692a}
+button:disabled{opacity:.48;cursor:not-allowed;box-shadow:none}
+.secondary{background:linear-gradient(#315c4b,#214334);border-color:#779783;color:#fff8e9;box-shadow:0 3px 0 #102c22}
+.muted{color:#c4d5c8}
+#message{color:#f2d27b;min-height:24px;text-align:center;font-weight:700}
 .row{display:flex;gap:10px;flex-wrap:wrap}
 .row>*{flex:1;min-width:120px}
-.cards{display:flex;flex-wrap:wrap;gap:10px}
-.card{width:100px;height:140px;background:white;color:#111;border:3px solid transparent;border-radius:10px;display:flex;flex-direction:column;justify-content:space-between;padding:10px;font-size:25px}
-.card.red{color:#c22}
-.card.selected{border-color:#f4c95d;transform:translateY(-5px)}
+.cards{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;padding:12px 0}
+.card{width:clamp(76px,18vw,108px);height:clamp(112px,25vw,150px);background:linear-gradient(135deg,#fffefa,#e9e5d9);color:#171717;border:3px solid #d5cba9;border-radius:11px;display:flex;flex-direction:column;justify-content:space-between;padding:10px;font-size:clamp(21px,5vw,29px);box-shadow:0 5px 12px #0005;transition:transform .15s,border-color .15s}
+.card.red{color:#c62835}
+.card.selected{border-color:#f2cb55;transform:translateY(-8px);box-shadow:0 0 0 3px #f2cb5544,0 10px 20px #0005}
 .card small{font-size:13px}
 .hidden{display:none}
-li{margin:7px 0}
-#result{white-space:pre-wrap;overflow-wrap:anywhere}
+li{margin:8px 0;padding:4px 0}
+hr{border:0;border-top:1px solid #6d805d;margin:20px 0}
+#result{white-space:pre-wrap;overflow-wrap:anywhere;background:#09271f;border-radius:10px;padding:12px}
+@media(max-width:600px){body{padding:8px}main{margin:4px auto;padding:13px;border-radius:14px}.panel{padding:14px}h1{font-size:1.65rem}.cards{gap:7px}.card{padding:7px;border-width:2px}}
+
 </style>
 </head>
 <body>
@@ -392,3 +401,4 @@ socket.on("disconnect", () => {
 </script>
 </body>
 </html>
+

@@ -7,3 +7,6 @@ coverage/
 *.log
 survival-poker-save.json
 server/src/*.backup
+
+client/index.backup.html
+client/index.before_design.html
