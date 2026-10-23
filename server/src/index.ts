@@ -9,7 +9,7 @@ import fs from "node:fs";
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const SAVE_FILE = path.resolve(process.cwd(), "survival-poker-save.json");
 
 type Suit = "♣" | "♦" | "♥" | "♠";
