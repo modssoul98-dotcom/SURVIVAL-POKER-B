@@ -57,6 +57,34 @@ hr{border:0;border-top:1px solid #6d805d;margin:20px 0}
 .result-card.red{color:#c62835}
 .result-card small{font-size:10px}
 @media(min-width:700px){#tableLayout{padding:28px}#tableSeats{grid-template-columns:repeat(3,minmax(0,1fr))}.table-seat{padding:12px}}
+/* Compact game screen */
+#gamePanel{padding:10px;margin:6px 0}
+#gamePanel h2{margin:4px 0;font-size:1.2rem}
+#gamePanel h3{margin:6px 0;font-size:1rem}
+#gamePanel #countdown{margin:3px 0;font-weight:800;color:#f2d27b}
+#gamePanel #gameHelp{margin:4px 0;font-size:.9rem}
+#gamePanel #tableLayout{margin:6px 0;padding:8px;min-height:0;border-radius:28px}
+#gamePanel #tableSeats{gap:5px}
+#gamePanel .table-seat{padding:5px 3px;font-size:.8rem}
+#gamePanel .seat-backs{margin-top:3px}
+#gamePanel .card-back{width:13px;height:19px}
+#gamePanel #deckCenter{padding:5px}
+#gamePanel .deck-stack{width:35px;height:49px;font-size:18px}
+#gamePanel .cards{gap:5px;padding:4px 0}
+#gamePanel .card{width:clamp(45px,13vw,76px);height:clamp(68px,19vw,105px);padding:5px;font-size:clamp(16px,4vw,22px);border-width:2px}
+#gamePanel .card small{font-size:10px}
+#gamePanel #confirm{padding:8px;margin:4px 0}
+#gamePanel #result{gap:5px;padding:6px;font-size:.85rem}
+#gamePanel .result-player{padding:6px}
+#gamePanel .result-card{width:34px;height:48px;padding:3px;font-size:12px}
+#gamePanel .result-card small{font-size:8px}
+@media(max-width:600px){
+  body{padding:4px}
+  main{margin:2px auto;padding:7px;border-radius:10px}
+  main>h1{margin:4px 0;font-size:1.25rem}
+  #gamePanel{padding:7px}
+  #gamePanel #tableSeats{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
 </style>
 </head>
 <body>
@@ -99,6 +127,7 @@ hr{border:0;border-top:1px solid #6d805d;margin:20px 0}
 
 <section class="panel hidden" id="gamePanel">
 <h2 id="roundTitle">ゲーム</h2>
+<p id="countdown" aria-live="polite">残り時間 -- 秒</p>
 <p id="gameHelp">交換するカードを選択してください。</p>
 <div id="tableLayout" aria-label="ポーカーテーブル">
   <div id="tableSeats"></div>
@@ -412,8 +441,25 @@ function renderTableSeats(players, result) {
   });
 }
 
+let countdownTimer = null;
+function updateCountdown() {
+  const el = $("countdown");
+  const room = lastState?.room;
+  if (!el) return;
+  if (room?.phase === "exchange" && Number.isFinite(room.deadline)) {
+    const seconds = Math.max(0, Math.ceil((room.deadline - Date.now()) / 1000));
+    el.textContent = `残り時間 ${seconds} 秒`;
+  } else if (room?.phase === "vote") {
+    el.textContent = "投票中";
+  } else {
+    el.textContent = "";
+  }
+}
+if (countdownTimer) clearInterval(countdownTimer);
+countdownTimer = setInterval(updateCountdown, 250);
 function renderState(state) {
   lastState = state;
+  updateCountdown();
   const room = state.room;
 
   $("roomPoints").textContent =
