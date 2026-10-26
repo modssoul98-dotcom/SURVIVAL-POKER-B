@@ -449,6 +449,9 @@ function updateCountdown() {
   if (room?.phase === "exchange" && Number.isFinite(room.deadline)) {
     const seconds = Math.max(0, Math.ceil((room.deadline - Date.now()) / 1000));
     el.textContent = `残り時間 ${seconds} 秒`;
+  } else if (room?.phase === "result" && Number.isFinite(room.deadline)) {
+    const seconds = Math.max(0, Math.ceil((room.deadline - Date.now()) / 1000));
+    el.textContent = `次のゲームまで ${seconds} 秒`;
   } else if (room?.phase === "vote") {
     el.textContent = "投票中";
   } else {

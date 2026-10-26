@@ -334,7 +334,7 @@ function completeExchange(r: Room) {
   }
 
   r.phase = "result";
-  r.deadline = null;
+  r.deadline = Date.now() + 10000;
 
   const scored = alive.map(p => ({
     id: p.id,
