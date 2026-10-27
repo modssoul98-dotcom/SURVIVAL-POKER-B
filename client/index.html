@@ -108,17 +108,12 @@ hr{border:0;border-top:1px solid #6d805d;margin:20px 0}
 <option value="45000">45,000ポイント</option>
 <option value="50000">50,000ポイント</option>
 </select>
-<button id="create">ルームを作成</button>
-<hr>
-<label for="codeInput">参加するルームコード</label>
-<input id="codeInput" maxlength="6" placeholder="6文字のコード">
-<button id="join" class="secondary">ルームに参加</button>
+<button id="create">マッチング開始</button>
+
 </section>
 
 <section class="panel hidden" id="roomPanel">
-<p>ルームコード：<strong id="roomCode"></strong></p>
 <p>初期ポイント：<strong id="roomPoints"></strong></p>
-<button id="copy" class="secondary">コードをコピー</button>
 <h2>参加者一覧</h2>
 <ol id="players"></ol>
 <p id="phase"></p>
@@ -170,31 +165,6 @@ function getNickname() {
   return $("nickname").value.trim();
 }
 
-async function enter(event, data) {
-  if (!getNickname()) {
-    msg("ニックネームを入力してください。");
-    return;
-  }
-
-  const result = await emitAck(event, {
-    ...data,
-    nickname: getNickname()
-  });
-
-  if (!result?.ok) {
-    msg(result?.error || "操作に失敗しました。");
-    return;
-  }
-
-  currentRoom = result.code;
-  token = result.token || token;
-  $("roomCode").textContent = result.code;
-  $("codeInput").value = result.code;
-  $("lobby").classList.add("hidden");
-  $("roomPanel").classList.remove("hidden");
-  msg("ルームに入りました！");
-}
-
 let matchmakingWaiting = false;
 
 $("create").onclick = async () => {
@@ -240,30 +210,10 @@ socket.on("matchmaking:matched", data => {
     sessionStorage.setItem("spb_token", token);
     sessionStorage.setItem("spb_code", currentRoom);
   } catch {}
-  $("roomCode").textContent = currentRoom;
-  $("codeInput").value = currentRoom;
   $("lobby").classList.add("hidden");
   $("roomPanel").classList.remove("hidden");
   msg("5人そろいました！ゲームを開始します。");
 });
-$("join").onclick = () => {
-  const code = $("codeInput").value.trim().toUpperCase();
-  if (code.length !== 6) {
-    msg("6文字のルームコードを入力してください。");
-    return;
-  }
-  enter("room:join", { code });
-};
-
-$("copy").onclick = async () => {
-  try {
-    await navigator.clipboard.writeText(currentRoom);
-    msg("ルームコードをコピーしました。");
-  } catch {
-    msg("ルームコード：" + currentRoom);
-  }
-};
-
 $("leave").onclick = () => {
   if (!confirm("退出しますか？ゲーム中は脱落扱いになる場合があります。")) return;
 
@@ -598,7 +548,6 @@ socket.on("game:state", state => {
   if (currentRoom && state.room.code !== currentRoom) return;
 
   currentRoom = state.room.code;
-  $("roomCode").textContent = currentRoom;
   $("lobby").classList.add("hidden");
   $("roomPanel").classList.remove("hidden");
   $("gamePanel").classList.remove("hidden");
