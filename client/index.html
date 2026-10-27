@@ -195,10 +195,57 @@ async function enter(event, data) {
   msg("ルームに入りました！");
 }
 
-$("create").onclick = () => enter("room:create", {
-  initialPoints: Number($("initialPoints").value)
+let matchmakingWaiting = false;
+
+$("create").onclick = async () => {
+  if (matchmakingWaiting) {
+    const result = await emitAck("matchmaking:cancel", {});
+    matchmakingWaiting = false;
+    $("create").textContent = "マッチング開始";
+    msg(result?.ok ? "マッチングをキャンセルしました。" : "キャンセルできませんでした。");
+    return;
+  }
+
+  if (!getNickname()) {
+    msg("ニックネームを入力してください。");
+    return;
+  }
+
+  const result = await emitAck("matchmaking:join", {
+    initialPoints: Number($("initialPoints").value),
+    nickname: getNickname()
+  });
+
+  if (!result?.ok) {
+    msg(result?.error || "マッチングに参加できませんでした。");
+    return;
+  }
+
+  matchmakingWaiting = true;
+  $("create").textContent = "マッチングをキャンセル";
+  msg(`マッチング待機中：初期ポイント ${Number(result.initialPoints).toLocaleString()}（現在 ${result.position}人／5人）。`);
+};
+
+socket.on("matchmaking:waiting", data => {
+  if (!matchmakingWaiting) return;
+  msg(`マッチング待機中：初期ポイント ${Number(data.initialPoints).toLocaleString()}（現在 ${data.position}人／5人）。`);
 });
 
+socket.on("matchmaking:matched", data => {
+  matchmakingWaiting = false;
+  $("create").textContent = "マッチング開始";
+  currentRoom = data.code;
+  token = data.token || token;
+  try {
+    sessionStorage.setItem("spb_token", token);
+    sessionStorage.setItem("spb_code", currentRoom);
+  } catch {}
+  $("roomCode").textContent = currentRoom;
+  $("codeInput").value = currentRoom;
+  $("lobby").classList.add("hidden");
+  $("roomPanel").classList.remove("hidden");
+  msg("5人そろいました！ゲームを開始します。");
+});
 $("join").onclick = () => {
   const code = $("codeInput").value.trim().toUpperCase();
   if (code.length !== 6) {

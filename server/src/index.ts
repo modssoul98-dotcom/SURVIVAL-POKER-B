@@ -48,6 +48,15 @@ type Room = {
 };
 
 const rooms = new Map<string, Room>();
+
+type MatchQueueEntry = {
+  socket: Socket;
+  nickname: string;
+  initialPoints: number;
+  token: string;
+  joinedAt: number;
+};
+const matchmakingQueues = new Map<number, MatchQueueEntry[]>();
 const SUITS: Suit[] = ["♣", "♦", "♥", "♠"];
 const RANK_NAMES = [
   "", "", "2", "3", "4", "5", "6", "7",
@@ -62,6 +71,77 @@ const HAND_NAMES = [
   "フォーカード", "ストレートフラッシュ", "ロイヤルフラッシュ"
 ];
 
+function createMatchedRoom(group: MatchQueueEntry[]) {
+  if (group.length !== 5) throw new Error("マッチング人数は5人である必要があります");
+
+  const code = makeCode();
+  const players: Player[] = group.map(entry => ({
+    id: entry.socket.id,
+    token: entry.token,
+    nickname: entry.nickname,
+    points: entry.initialPoints,
+    hand: [],
+    connected: true,
+    joinedAt: entry.joinedAt,
+    eliminated: false,
+    exchange: null,
+    confirmed: false,
+    vote: null
+  }));
+
+  const r: Room = {
+    code,
+    hostId: players[0].id,
+    players,
+    initialPoints: group[0].initialPoints,
+    started: true,
+    phase: "waiting",
+    round: 0,
+    deck: [],
+    discard: [],
+    deadline: null,
+    result: null,
+    startingBalances: Object.fromEntries(players.map(p => [p.id, p.points])),
+    feeApplied: false
+  };
+
+  rooms.set(code, r);
+
+  for (const entry of group) {
+    entry.socket.join(code);
+    entry.socket.emit("session:token", { token: entry.token, code });
+    entry.socket.emit("matchmaking:matched", { code, token: entry.token });
+  }
+
+  io.to(code).emit("game:started", { message: "5人そろいました！ゲーム開始！" });
+  dealRound(r);
+  updateRoom(r);
+}
+
+function processMatchmakingQueue(initialPoints: number) {
+  let queue = matchmakingQueues.get(initialPoints);
+  if (!queue || queue.length < 5) return;
+
+  while (queue.length >= 5) {
+    const shuffled = [...queue];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = randomInt(i + 1);
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    const group = shuffled.slice(0, 5);
+    const groupIds = new Set(group.map(entry => entry.socket.id));
+    queue = queue.filter(entry => !groupIds.has(entry.socket.id));
+
+    if (queue.length > 0) {
+      matchmakingQueues.set(initialPoints, queue);
+    } else {
+      matchmakingQueues.delete(initialPoints);
+    }
+
+    createMatchedRoom(group);
+  }
+}
 function makeCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let value = "";
@@ -597,6 +677,67 @@ app.get("/health", (_req, res) => {
 });
 
 io.on("connection", (socket: Socket) => {
+  socket.on("matchmaking:join", (data: any, cb: any) => {
+    const nickname = String(data?.nickname ?? "").trim();
+    const initialPoints = Number(data?.initialPoints ?? 10000);
+
+    if (!nickname || nickname.length > 20) {
+      cb?.({ ok: false, error: "ニックネームは1～20文字で入力してください。" });
+      return;
+    }
+    if (!Number.isInteger(initialPoints) || initialPoints < 5000 ||
+        initialPoints > 50000 || initialPoints % 5000 !== 0) {
+      cb?.({ ok: false, error: "初期ポイントは5,000～50,000の5,000刻みです。" });
+      return;
+    }
+
+    const queue = matchmakingQueues.get(initialPoints) ?? [];
+    if (queue.some(entry => entry.nickname.toLowerCase() === nickname.toLowerCase())) {
+      cb?.({ ok: false, error: "同じ初期ポイントの待機列に同じニックネームがいます。" });
+      return;
+    }
+    if ([...rooms.values()].some(room =>
+      room.players.some(player =>
+        player.connected && player.nickname.toLowerCase() === nickname.toLowerCase()
+      )
+    )) {
+      cb?.({ ok: false, error: "このニックネームは現在ゲームで使用されています。" });
+      return;
+    }
+
+    const entry: MatchQueueEntry = {
+      socket,
+      nickname,
+      initialPoints,
+      token: randomBytes(24).toString("hex"),
+      joinedAt: Date.now()
+    };
+
+    queue.push(entry);
+    matchmakingQueues.set(initialPoints, queue);
+    cb?.({ ok: true, waiting: true, initialPoints, position: queue.length });
+    socket.emit("matchmaking:waiting", {
+      initialPoints,
+      position: queue.length,
+      needed: 5 - queue.length
+    });
+
+    processMatchmakingQueue(initialPoints);
+  });
+
+  socket.on("matchmaking:cancel", (_data: any, cb: any) => {
+    let removed = false;
+    for (const [points, queue] of matchmakingQueues) {
+      const remaining = queue.filter(entry => entry.socket.id !== socket.id);
+      if (remaining.length !== queue.length) {
+        removed = true;
+        if (remaining.length) matchmakingQueues.set(points, remaining);
+        else matchmakingQueues.delete(points);
+      }
+    }
+    cb?.({ ok: true, removed });
+  });
+
   socket.on("room:create", (data: any, cb: any) => {
     const nickname = String(data?.nickname ?? "").trim();
     const initialPoints = Number(data?.initialPoints ?? 10000);
@@ -770,6 +911,15 @@ io.on("connection", (socket: Socket) => {
   });
 
   socket.on("disconnect", () => {
+    for (const [points, queue] of matchmakingQueues) {
+      const remaining = queue.filter(entry => entry.socket.id !== socket.id);
+      if (remaining.length !== queue.length) {
+        if (remaining.length > 0) matchmakingQueues.set(points, remaining);
+        else matchmakingQueues.delete(points);
+      }
+    }
+
+
     const r = [...rooms.values()].find(x => x.players.some(p => p.id === socket.id));
     const p = r?.players.find(x => x.id === socket.id);
     if (!r || !p) return;
